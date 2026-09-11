@@ -596,7 +596,7 @@ function adjustWeight(delta) {
   const last = state.bodyLog.length ? state.bodyLog[state.bodyLog.length - 1].weightKg : 70;
   const todays = state.bodyLog.find((b) => b.date === today);
   const base = todays ? todays.weightKg : last;
-  Store.logWeight(today, Math.max(0, Math.round((base + delta) * 100) / 100));
+  Store.logWeight(today, Math.max(0, Math.round((base + delta) * 10) / 10));
 }
 
 function adjustKcal(delta) {
@@ -660,11 +660,11 @@ function renderLog() {
     <div class="card log-card">
       <div class="log-card-head"><span class="lc-title">Body Weight</span>${weightDelta}</div>
       <div class="stepper-row">
-        <button class="step-btn-lg" data-adjust="weight" data-delta="-0.01" aria-label="Decrease weight">−</button>
+        <button class="step-btn-lg" data-adjust="weight" data-delta="-0.1" aria-label="Decrease weight">−</button>
         <div class="stepper-center"><span class="val">${latestWeight ? latestWeight.weightKg : "—"}</span><span class="unit">kg</span></div>
-        <button class="step-btn-lg" data-adjust="weight" data-delta="0.01" aria-label="Increase weight">+</button>
+        <button class="step-btn-lg" data-adjust="weight" data-delta="0.1" aria-label="Increase weight">+</button>
       </div>
-      <div class="stepper-caption">0.01 kg steps · today</div>
+      <div class="stepper-caption">0.1 kg steps · today</div>
       ${weightSpark}
     </div>
 
