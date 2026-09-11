@@ -890,9 +890,19 @@ window.Actions = {
   setProgramName, setUserName, setUserHeight,
 };
 
+function disablePinchZoom() {
+  // iOS Safari still allows pinch-zoom despite user-scalable=no in the
+  // viewport meta tag; blocking the gesture events directly is the only
+  // reliable way to stop it there. Multi-touch touchmove covers other
+  // browsers that fire pinch as regular touch events instead.
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
+  document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+}
+
 Store.subscribe(renderAll);
 setupTabs();
 setupSteppers();
+disablePinchZoom();
 renderAll();
 
 if ("serviceWorker" in navigator) {
