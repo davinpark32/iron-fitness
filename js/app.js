@@ -7,7 +7,12 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
-function isoDate(d) { return d.toISOString().slice(0, 10); }
+// Local calendar date as YYYY-MM-DD. Deliberately NOT toISOString() (which
+// is UTC-based) — that made "today" resolve to yesterday for a chunk of
+// every day in timezones ahead of UTC.
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function todayISO() { return isoDate(new Date()); }
 function fmtMinSec(sec) { const m = Math.floor(sec / 60), s = sec % 60; return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
 function fmtHM(sec) { const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
@@ -615,32 +620,53 @@ function renderSessionDetail() {
 // =========================================================
 // LOG (weight + kcal)
 // =========================================================
+let logDate = todayISO();
+function changeLogDay(delta) {
+  const d = new Date(logDate + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  const iso = isoDate(d);
+  if (iso > todayISO()) return;
+  logDate = iso;
+  renderLog();
+}
+
 function adjustWeight(delta) {
   const state = Store.state;
-  const today = todayISO();
   const last = state.bodyLog.length ? state.bodyLog[state.bodyLog.length - 1].weightKg : 70;
-  const todays = state.bodyLog.find((b) => b.date === today);
-  const base = todays ? todays.weightKg : last;
-  Store.logWeight(today, Math.max(0, Math.round((base + delta) * 10) / 10));
+  const viewed = state.bodyLog.find((b) => b.date === logDate);
+  const base = viewed ? viewed.weightKg : last;
+  Store.logWeight(logDate, Math.max(0, Math.round((base + delta) * 10) / 10));
 }
 
 function adjustKcal(delta) {
   const state = Store.state;
-  const today = todayISO();
-  const todays = state.kcalLog.find((k) => k.date === today);
-  const base = todays ? todays.kcal : 0;
-  Store.logKcal(today, Math.max(0, base + delta));
+  const viewed = state.kcalLog.find((k) => k.date === logDate);
+  const base = viewed ? viewed.kcal : 0;
+  Store.logKcal(logDate, Math.max(0, base + delta));
 }
 
 function sparklineHtml(points, getValue, unitLabel, ariaLabel) {
-  if (points.length < 2) return `<div class="hint">Log a few more days to see a trend line.</div>`;
+  if (!points.length) return `<div class="hint">Log an entry to see a trend line.</div>`;
   const pts = points.slice(-14);
+  const w = 320, h = 80, pad = 8;
+
+  if (pts.length === 1) {
+    const v = getValue(pts[0]);
+    return `
+      <div class="sparkline">
+        <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="${ariaLabel}">
+          <line x1="0" y1="${h / 2}" x2="${w}" y2="${h / 2}" stroke="var(--line)" stroke-width="1"/>
+          <circle cx="${w / 2}" cy="${h / 2}" r="4" fill="var(--accent)"/>
+        </svg>
+        <div class="spark-caption"><span>${fmtDate(pts[0].date)}</span><span>${v.toLocaleString()}${unitLabel}</span></div>
+      </div>`;
+  }
+
   const vals = pts.map(getValue);
   const min = Math.min(...vals), max = Math.max(...vals);
   const range = max - min || 1;
-  const w = 320, h = 80, pad = 8;
   const coords = pts.map((p, i) => {
-    const x = pts.length > 1 ? (i / (pts.length - 1)) * w : 0;
+    const x = (i / (pts.length - 1)) * w;
     const y = pad + (1 - (getValue(p) - min) / range) * (h - pad * 2);
     return [x, y];
   });
@@ -662,8 +688,12 @@ function renderLog() {
   const state = Store.state;
   const root = $("#screen-log");
   const today = todayISO();
+  const isToday = logDate === today;
+  const dayLabel = isToday ? "Today" : new Date(logDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const dayWord = isToday ? "today" : dayLabel;
 
   const weightSorted = [...state.bodyLog].sort((a, b) => a.date.localeCompare(b.date));
+  const viewedWeight = weightSorted.find((b) => b.date === logDate);
   const latestWeight = weightSorted.length ? weightSorted[weightSorted.length - 1] : null;
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoEntry = weightSorted.find((b) => new Date(b.date + "T00:00:00") >= weekAgo);
@@ -675,21 +705,27 @@ function renderLog() {
   const weightSpark = sparklineHtml(weightSorted, (p) => p.weightKg, " kg", `Body weight trend, ${weightSorted.length ? weightSorted[0].weightKg : ""} to ${latestWeight ? latestWeight.weightKg : ""} kilograms`);
 
   const kcalSorted = [...state.kcalLog].sort((a, b) => a.date.localeCompare(b.date));
-  const latestKcal = kcalSorted.find((k) => k.date === today);
+  const viewedKcal = kcalSorted.find((k) => k.date === logDate);
   const kcalSpark = sparklineHtml(kcalSorted, (p) => p.kcal, " kcal", "Calories eaten trend");
 
   root.innerHTML = `
     <div class="eyebrow">Body weight &amp; nutrition</div>
     <div class="log-title">Log</div>
 
+    <div class="log-day-nav">
+      <button onclick="Actions.changeLogDay(-1)" aria-label="Previous day">‹</button>
+      <div class="log-day-label">${dayLabel}</div>
+      <button onclick="Actions.changeLogDay(1)" aria-label="Next day" ${isToday ? "disabled" : ""}>›</button>
+    </div>
+
     <div class="card log-card">
       <div class="log-card-head"><span class="lc-title">Body Weight</span>${weightDelta}</div>
       <div class="stepper-row">
         <button class="step-btn-lg" data-adjust="weight" data-delta="-0.1" aria-label="Decrease weight">−</button>
-        <div class="stepper-center"><span class="val">${latestWeight ? latestWeight.weightKg : "—"}</span><span class="unit">kg</span></div>
+        <div class="stepper-center"><span class="val">${viewedWeight ? viewedWeight.weightKg : "—"}</span><span class="unit">kg</span></div>
         <button class="step-btn-lg" data-adjust="weight" data-delta="0.1" aria-label="Increase weight">+</button>
       </div>
-      <div class="stepper-caption">0.1 kg steps · today</div>
+      <div class="stepper-caption">0.1 kg steps · ${dayWord}</div>
       ${weightSpark}
     </div>
 
@@ -697,10 +733,10 @@ function renderLog() {
       <div class="log-card-head"><span class="lc-title">Calories Eaten</span></div>
       <div class="stepper-row">
         <button class="step-btn-lg" data-adjust="kcal" data-delta="-50" aria-label="Decrease calories">−</button>
-        <div class="stepper-center"><span class="val">${(latestKcal ? latestKcal.kcal : 0).toLocaleString()}</span><span class="unit">kcal</span></div>
+        <div class="stepper-center"><span class="val">${(viewedKcal ? viewedKcal.kcal : 0).toLocaleString()}</span><span class="unit">kcal</span></div>
         <button class="step-btn-lg" data-adjust="kcal" data-delta="50" aria-label="Increase calories">+</button>
       </div>
-      <div class="stepper-caption">50 kcal steps · today</div>
+      <div class="stepper-caption">50 kcal steps · ${dayWord}</div>
       ${kcalSpark}
       <div class="chips">
         <button class="chip-btn" onclick="Actions.adjustKcal(250)">+250</button>
@@ -1161,7 +1197,7 @@ function setupSteppers() {
 window.Actions = {
   startWorkout, primaryTrainAction, setRir, skipRest, cancelWorkout, goPrev, goNext, goHome: () => showScreen("home"),
   changeMonth,
-  adjustKcal,
+  adjustKcal, changeLogDay,
   openBuild, closeBuild, openProfile, closeProfile, openSessionDetail, closeSessionDetail,
   addDay, toggleEditDay, deleteDay, renameDay, reorderDay, reorderDayItem, removeDayItem, addDayItem,
   editDayItem, cancelEditDayItem, saveDayItem,

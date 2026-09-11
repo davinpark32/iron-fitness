@@ -253,6 +253,14 @@ main::-webkit-scrollbar{ width:0; }
 
 /* ---- LOG ---- */
 .log-title{ font-weight:800; font-size:22px; letter-spacing:.1px; }
+.log-day-nav{ display:flex; align-items:center; justify-content:space-between; margin-top:14px; }
+.log-day-nav button{
+  width:40px; height:40px; border-radius:12px; border:1px solid var(--line-strong); background:var(--surface);
+  color:var(--text); font-size:20px; display:flex; align-items:center; justify-content:center;
+}
+.log-day-nav button:active{ background:var(--surface-2); }
+.log-day-nav button:disabled{ opacity:.3; }
+.log-day-label{ font-size:15px; font-weight:800; }
 .log-card{ margin-top:14px; }
 .log-card-head{ display:flex; justify-content:space-between; align-items:center; }
 .lc-title{ font-size:12.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
