@@ -1,4 +1,5 @@
 import { Store } from "./store.js";
+import { EXERCISE_DB } from "./exercise-db.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -552,33 +553,9 @@ function renderLog() {
 }
 
 // =========================================================
-// BUILD (exercises + program days)
+// BUILD (program days, exercises added inline via search)
 // =========================================================
-const buildUi = { editingExerciseId: null, editingDayId: null };
-
-function newExerciseForm() { buildUi.editingExerciseId = "new"; renderBuild(); }
-function editExercise(id) { buildUi.editingExerciseId = id; renderBuild(); }
-function cancelExerciseForm() { buildUi.editingExerciseId = null; renderBuild(); }
-function saveExerciseForm() {
-  const name = $("#ef-name").value.trim();
-  if (!name) { toast("Give the exercise a name"); return; }
-  const id = buildUi.editingExerciseId === "new" ? undefined : buildUi.editingExerciseId;
-  Store.upsertExercise({
-    id,
-    name,
-    defaultSets: parseInt($("#ef-sets").value, 10) || 3,
-    defaultReps: parseInt($("#ef-reps").value, 10) || 10,
-    defaultWeight: parseFloat($("#ef-weight").value) || 0,
-    restSec: parseInt($("#ef-rest").value, 10) || 90,
-  });
-  buildUi.editingExerciseId = null;
-  renderBuild();
-}
-function deleteExercise(id) {
-  if (!confirm("Delete this exercise? It will be removed from any training days using it.")) return;
-  Store.deleteExercise(id);
-  renderBuild();
-}
+const buildUi = { editingDayId: null, exercisePicker: null };
 
 function addDay() {
   const input = $("#new-day-name");
@@ -587,13 +564,18 @@ function addDay() {
   const id = Store.upsertDay({ name });
   input.value = "";
   buildUi.editingDayId = id;
+  buildUi.exercisePicker = null;
   renderBuild();
 }
-function toggleEditDay(id) { buildUi.editingDayId = buildUi.editingDayId === id ? null : id; renderBuild(); }
+function toggleEditDay(id) {
+  buildUi.editingDayId = buildUi.editingDayId === id ? null : id;
+  buildUi.exercisePicker = null;
+  renderBuild();
+}
 function deleteDay(id) {
   if (!confirm("Delete this training day?")) return;
   Store.deleteDay(id);
-  if (buildUi.editingDayId === id) buildUi.editingDayId = null;
+  if (buildUi.editingDayId === id) { buildUi.editingDayId = null; buildUi.exercisePicker = null; }
   renderBuild();
 }
 function renameDay(id) {
@@ -604,70 +586,131 @@ function reorderDay(id, delta) { Store.reorderDay(id, delta); renderBuild(); }
 function reorderDayItem(dayId, itemId, delta) { Store.reorderDayItem(dayId, itemId, delta); renderBuild(); }
 function removeDayItem(dayId, itemId) { Store.removeDayItem(dayId, itemId); renderBuild(); }
 
-function addDayItem(dayId) {
-  const exerciseId = $(`#di-exercise-${dayId}`).value;
-  if (!exerciseId) { toast("Pick an exercise to add"); return; }
-  const ex = Store.state.exercises[exerciseId];
-  Store.addDayItem(dayId, {
-    exerciseId,
-    sets: parseInt($(`#di-sets-${dayId}`).value, 10) || ex.defaultSets,
-    repsTarget: parseInt($(`#di-reps-${dayId}`).value, 10) || ex.defaultReps,
-    restSec: parseInt($(`#di-rest-${dayId}`).value, 10) || ex.restSec,
-    group: $(`#di-group-${dayId}`).value,
-  });
-  renderBuild();
+// ---- exercise search picker (nested inside an open training day) ----
+function onExerciseSearch(dayId, query) {
+  if (!buildUi.exercisePicker || buildUi.exercisePicker.dayId !== dayId) {
+    buildUi.exercisePicker = { dayId, query: "", selected: null, results: [] };
+  }
+  buildUi.exercisePicker.query = query;
+  renderExerciseResults(dayId);
 }
 
-function onDayItemExerciseChange(dayId) {
-  const exerciseId = $(`#di-exercise-${dayId}`).value;
-  const ex = Store.state.exercises[exerciseId];
-  if (!ex) return;
-  $(`#di-sets-${dayId}`).value = ex.defaultSets;
-  $(`#di-reps-${dayId}`).value = ex.defaultReps;
-  $(`#di-rest-${dayId}`).value = ex.restSec;
+function renderExerciseResults(dayId) {
+  const container = $(`#ex-results-${dayId}`);
+  const picker = buildUi.exercisePicker;
+  if (!container || !picker) return;
+  const query = picker.query.trim().toLowerCase();
+  const state = Store.state;
+
+  const customMatches = Object.values(state.exercises)
+    .filter((ex) => !query || ex.name.toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((ex) => ({ id: ex.id, name: ex.name, source: "custom", defaultSets: ex.defaultSets, defaultReps: ex.defaultReps, defaultRest: ex.restSec }));
+
+  if (!query) {
+    picker.results = [];
+    container.innerHTML = `<div class="hint">Type to search ${EXERCISE_DB.length}+ exercises, or add your own.</div>`;
+    return;
+  }
+
+  const customNames = new Set(customMatches.map((c) => c.name.toLowerCase()));
+  const dbMatches = EXERCISE_DB
+    .filter((ex) => ex.name.toLowerCase().includes(query) && !customNames.has(ex.name.toLowerCase()))
+    .slice(0, 25)
+    .map((ex) => ({ id: null, name: ex.name, source: "db", defaultSets: 3, defaultReps: 10, defaultRest: 90 }));
+
+  const results = [...customMatches, ...dbMatches];
+  if (!results.some((r) => r.name.toLowerCase() === query)) {
+    results.push({ id: null, name: picker.query.trim(), source: "new", defaultSets: 3, defaultReps: 10, defaultRest: 90 });
+  }
+  picker.results = results;
+
+  container.innerHTML = results.map((r, i) => {
+    if (r.source === "new") {
+      return `<button class="ex-result-row ex-add-custom" onclick="Actions.pickExercise('${dayId}', ${i})">+ Add "${esc(r.name)}" as new exercise</button>`;
+    }
+    return `
+      <div class="ex-result-row">
+        <button class="ex-result-pick" onclick="Actions.pickExercise('${dayId}', ${i})">
+          <span>${esc(r.name)}</span>${r.source === "custom" ? '<span class="ex-tag">Yours</span>' : ""}
+        </button>
+        ${r.source === "custom" ? `<button class="ex-result-del" onclick="Actions.deleteCustomExercise('${dayId}','${r.id}')" aria-label="Delete ${esc(r.name)}">✕</button>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function pickExercise(dayId, index) {
+  const picker = buildUi.exercisePicker;
+  if (!picker || !picker.results[index]) return;
+  picker.selected = picker.results[index];
+  renderBuild();
+}
+function clearExercisePick(dayId) {
+  buildUi.exercisePicker = { dayId, query: "", selected: null, results: [] };
+  renderBuild();
+}
+function deleteCustomExercise(dayId, exerciseId) {
+  if (!confirm("Delete this custom exercise? It will be removed from any training days using it.")) return;
+  Store.deleteExercise(exerciseId);
+}
+
+function addDayItem(dayId) {
+  const picker = buildUi.exercisePicker;
+  if (!picker || picker.dayId !== dayId || !picker.selected) { toast("Search and pick an exercise first"); return; }
+
+  const sets = parseInt($(`#di-sets-${dayId}`).value, 10) || 3;
+  const repsTarget = parseInt($(`#di-reps-${dayId}`).value, 10) || 10;
+  const restSec = parseInt($(`#di-rest-${dayId}`).value, 10) || 90;
+  const group = $(`#di-group-${dayId}`).value;
+
+  let exerciseId = picker.selected.id;
+  if (!exerciseId) {
+    exerciseId = Store.upsertExercise({ name: picker.selected.name, defaultSets: sets, defaultReps: repsTarget, defaultWeight: 20, restSec });
+  }
+
+  buildUi.exercisePicker = { dayId, query: "", selected: null, results: [] };
+  Store.addDayItem(dayId, { exerciseId, sets, repsTarget, restSec, group });
+}
+
+function renderAddExerciseBlock(dayId) {
+  const picker = buildUi.exercisePicker && buildUi.exercisePicker.dayId === dayId ? buildUi.exercisePicker : null;
+
+  if (picker && picker.selected) {
+    const groupOptions = Store.GROUPS.map((g) => `<option value="${g}">${g === "None" ? "No Superset" : "Superset " + g}</option>`).join("");
+    return `
+      <div class="add-row ex-picker">
+        <div class="ex-selected-chip">
+          <span>${esc(picker.selected.name)}</span>
+          <button onclick="Actions.clearExercisePick('${dayId}')" aria-label="Change exercise">✕ Change</button>
+        </div>
+        <div class="field-row3" style="margin-top:12px;">
+          <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-sets-${dayId}" value="${picker.selected.defaultSets}"></div>
+          <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-reps-${dayId}" value="${picker.selected.defaultReps}"></div>
+          <div class="field" style="margin-top:0;"><label>Rest s</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-rest-${dayId}" value="${picker.selected.defaultRest}"></div>
+        </div>
+        <div class="field"><label>Group</label><select id="di-group-${dayId}">${groupOptions}</select></div>
+        <button class="btn-cta" style="margin-top:14px; font-size:16px; padding:15px 0;" onclick="Actions.addDayItem('${dayId}')">+ ADD TO DAY</button>
+      </div>`;
+  }
+
+  return `
+    <div class="add-row ex-picker">
+      <div class="field" style="margin-top:0;">
+        <label>Add Exercise</label>
+        <input type="text" id="ex-search-${dayId}" placeholder="Search exercises…" autocomplete="off" value="${esc(picker ? picker.query : "")}" oninput="Actions.onExerciseSearch('${dayId}', this.value)">
+      </div>
+      <div id="ex-results-${dayId}" class="ex-results">${picker && picker.query.trim() ? "" : `<div class="hint">Type to search ${EXERCISE_DB.length}+ exercises, or add your own.</div>`}</div>
+    </div>`;
 }
 
 function renderBuild() {
   const state = Store.state;
   const root = $("#screen-build");
 
-  const editingEx = buildUi.editingExerciseId ? (buildUi.editingExerciseId === "new" ? {} : state.exercises[buildUi.editingExerciseId]) : null;
-
-  const exerciseForm = editingEx !== null ? `
-    <div class="list-item">
-      <div class="field"><label>Name</label><input type="text" id="ef-name" value="${esc(editingEx.name || "")}" placeholder="e.g. Barbell Bench Press"></div>
-      <div class="field-row3" style="margin-top:14px;">
-        <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-sets" value="${editingEx.defaultSets ?? 3}"></div>
-        <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-reps" value="${editingEx.defaultReps ?? 10}"></div>
-        <div class="field" style="margin-top:0;"><label>Weight kg</label><input type="text" inputmode="decimal" id="ef-weight" value="${editingEx.defaultWeight ?? 20}"></div>
-      </div>
-      <div class="field"><label>Rest (seconds)</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-rest" value="${editingEx.restSec ?? 90}"></div>
-      <div class="field-row" style="margin-top:16px;">
-        <button class="btn-ghost" onclick="Actions.cancelExerciseForm()">Cancel</button>
-        <button class="btn-cta" style="font-size:15px; padding:13px 0;" onclick="Actions.saveExerciseForm()">SAVE</button>
-      </div>
-    </div>` : `<button class="btn-cta add-row" style="font-size:16px; padding:15px 0;" onclick="Actions.newExerciseForm()">+ ADD EXERCISE</button>`;
-
-  const exerciseList = Object.values(state.exercises).sort((a, b) => a.name.localeCompare(b.name)).map((ex) => `
-    <div class="list-item">
-      <div class="li-head">
-        <div>
-          <div class="li-title">${esc(ex.name)}</div>
-          <div class="li-meta">${ex.defaultSets}×${ex.defaultReps} · ${ex.defaultWeight}kg · ${ex.restSec}s rest</div>
-        </div>
-        <div class="li-actions">
-          <button onclick="Actions.editExercise('${ex.id}')" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
-          <button class="danger" onclick="Actions.deleteExercise('${ex.id}')" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M6 7V4h12v3M8 7v13h8V7"/></svg></button>
-        </div>
-      </div>
-    </div>`).join("") || `<div class="empty-mini">No exercises yet — add your first above.</div>`;
-
-  const exerciseOptions = Object.values(state.exercises).sort((a, b) => a.name.localeCompare(b.name)).map((ex) => `<option value="${ex.id}">${esc(ex.name)}</option>`).join("");
-
   const dayList = state.dayOrder.map((id, idx) => {
     const day = state.days[id];
     const open = buildUi.editingDayId === id;
-    const itemRows = day.items.map((it, i) => {
+    const itemRows = day.items.map((it) => {
       const ex = state.exercises[it.exerciseId];
       const groupBadge = it.group !== "None" ? `<span class="dir-group">${it.group}</span>` : "";
       return `
@@ -684,23 +727,13 @@ function renderBuild() {
         </div>`;
     }).join("") || `<div class="empty-mini">No exercises in this day yet.</div>`;
 
-    const groupOptions = Store.GROUPS.map((g) => `<option value="${g}">${g === "None" ? "No Superset" : "Superset " + g}</option>`).join("");
-
     const detail = open ? `
       <div style="margin-top:12px;">
         <div class="field"><label>Day Name</label><input type="text" id="day-name-${id}" value="${esc(day.name)}" onchange="Actions.renameDay('${id}')"></div>
         ${itemRows}
-        ${exerciseOptions ? `
-        <div class="add-row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px;">
-          <div class="field" style="margin-top:0;"><label>Add Exercise</label><select id="di-exercise-${id}" onchange="Actions.onDayItemExerciseChange('${id}')">${exerciseOptions}</select></div>
-          <div class="field-row3" style="margin-top:10px;">
-            <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-sets-${id}" value="3"></div>
-            <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-reps-${id}" value="10"></div>
-            <div class="field" style="margin-top:0;"><label>Rest s</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-rest-${id}" value="90"></div>
-          </div>
-          <div class="field"><label>Group</label><select id="di-group-${id}">${groupOptions}</select></div>
-          <button class="btn-cta" style="margin-top:14px; font-size:16px; padding:15px 0;" onclick="Actions.addDayItem('${id}')">+ ADD TO DAY</button>
-        </div>` : `<div class="empty-mini">Add an exercise above first, then come back to build this day.</div>`}
+        <div style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px;">
+          ${renderAddExerciseBlock(id)}
+        </div>
       </div>` : "";
 
     return `
@@ -735,15 +768,8 @@ function renderBuild() {
       </div>
 
       <div class="build-section">
-        <h3>Exercises</h3>
-        <p class="sub">Your exercise library. Add one, then use it in as many training days as you like.</p>
-        ${exerciseList}
-        ${exerciseForm}
-      </div>
-
-      <div class="build-section">
         <h3>Training Days</h3>
-        <p class="sub">Group exercises into days. Give two exercises the same superset letter to alternate between them.</p>
+        <p class="sub">Add a day, then search for exercises to add to it. Give two exercises the same superset letter to alternate between them.</p>
         ${dayList}
         <div class="new-day-box">
           <div class="field" style="margin-top:0;"><label>New Training Day</label><input type="text" id="new-day-name" placeholder="e.g. Push Day B"></div>
@@ -753,6 +779,10 @@ function renderBuild() {
 
     </div>
   `;
+
+  if (buildUi.exercisePicker && buildUi.exercisePicker.dayId === buildUi.editingDayId && !buildUi.exercisePicker.selected) {
+    renderExerciseResults(buildUi.exercisePicker.dayId);
+  }
 }
 
 function setProgramName(name) { Store.setProgramName(name.trim()); }
@@ -884,8 +914,8 @@ window.Actions = {
   changeMonth,
   adjustKcal,
   openBuild, closeBuild, openProfile, closeProfile,
-  newExerciseForm, editExercise, cancelExerciseForm, saveExerciseForm, deleteExercise,
-  addDay, toggleEditDay, deleteDay, renameDay, reorderDay, reorderDayItem, removeDayItem, addDayItem, onDayItemExerciseChange,
+  addDay, toggleEditDay, deleteDay, renameDay, reorderDay, reorderDayItem, removeDayItem, addDayItem,
+  onExerciseSearch, pickExercise, clearExercisePick, deleteCustomExercise,
   exportData, importData, handleImportFile, resetAll,
   setProgramName, setUserName, setUserHeight,
 };

@@ -290,6 +290,38 @@ input:focus, select:focus{ outline:2px solid var(--lime); outline-offset:1px; }
 
 .empty-mini{ font-size:12.5px; color:var(--text-faint); padding:14px 0; text-align:center; border:1px dashed var(--line-strong); border-radius:var(--radius-md); margin-top:10px; }
 
+.ex-results{
+  margin-top:8px; display:flex; flex-direction:column; gap:4px;
+  max-height:280px; overflow-y:auto; background:var(--surface-2); border:1px solid var(--line-strong);
+  border-radius:12px; padding:5px;
+}
+.ex-result-row{ display:flex; align-items:center; gap:6px; }
+.ex-result-pick{
+  flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0;
+  background:none; border:none; color:var(--text); padding:11px 10px; font-size:13.5px; font-weight:600;
+  border-radius:8px; text-align:left;
+}
+.ex-result-pick span:first-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ex-result-pick:active{ background:var(--shell); }
+.ex-tag{
+  flex:0 0 auto; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--lime); background:var(--lime-dim); padding:3px 7px; border-radius:99px;
+}
+.ex-result-del{
+  flex:0 0 auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line-strong);
+  background:var(--shell); color:var(--coral); font-size:14px;
+}
+.ex-add-custom{
+  width:100%; border:1px dashed var(--lime); background:var(--lime-dim); color:var(--lime);
+  border-radius:8px; padding:12px 10px; font-weight:700; font-size:13px; text-align:center;
+}
+.ex-selected-chip{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background:var(--lime-dim); border:1px solid var(--lime); border-radius:12px; padding:13px 14px;
+  font-weight:700; font-size:14px; color:var(--text);
+}
+.ex-selected-chip button{ flex:0 0 auto; background:none; border:none; color:var(--lime); font-size:12px; font-weight:700; }
+
 /* ---- tab bar ---- */
 nav.tabbar{ display:flex; border-top:1px solid var(--line); background:var(--shell); padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px)); flex:0 0 auto; }
 .tab{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; background:none; border:none; padding:6px 0; color:var(--text-faint); }

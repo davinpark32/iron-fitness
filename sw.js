@@ -6,6 +6,7 @@ const SHELL = [
   "./css/styles.css",
   "./js/app.js",
   "./js/store.js",
+  "./js/exercise-db.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
