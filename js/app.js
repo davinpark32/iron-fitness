@@ -365,8 +365,8 @@ function renderTrain() {
           <div class="rval">${runner.currentWeight}</div>
           <div class="runit">kg</div>
           <div class="stepper">
-            <button class="step-btn" onclick="Actions.step('weight',-2.5)">−</button>
-            <button class="step-btn" onclick="Actions.step('weight',2.5)">+</button>
+            <button class="step-btn" data-step="weight" data-delta="-2.5">−</button>
+            <button class="step-btn" data-step="weight" data-delta="2.5">+</button>
           </div>
         </div>
         <div class="readout ${met ? "met" : ""}">
@@ -374,8 +374,8 @@ function renderTrain() {
           <div class="rval">${runner.currentReps}${met ? '<span class="check">✓</span>' : ""}</div>
           <div class="runit">completed</div>
           <div class="stepper">
-            <button class="step-btn" onclick="Actions.step('reps',-1)">−</button>
-            <button class="step-btn" onclick="Actions.step('reps',1)">+</button>
+            <button class="step-btn" data-step="reps" data-delta="-1">−</button>
+            <button class="step-btn" data-step="reps" data-delta="1">+</button>
           </div>
         </div>
       </div>
@@ -525,9 +525,9 @@ function renderLog() {
     <div class="card log-card">
       <div class="log-card-head"><span class="lc-title">Body Weight</span>${weightDelta}</div>
       <div class="stepper-row">
-        <button class="step-btn-lg" onclick="Actions.adjustWeight(-0.01)" aria-label="Decrease weight">−</button>
+        <button class="step-btn-lg" data-adjust="weight" data-delta="-0.01" aria-label="Decrease weight">−</button>
         <div class="stepper-center"><span class="val">${latestWeight ? latestWeight.weightKg : "—"}</span><span class="unit">kg</span></div>
-        <button class="step-btn-lg" onclick="Actions.adjustWeight(0.01)" aria-label="Increase weight">+</button>
+        <button class="step-btn-lg" data-adjust="weight" data-delta="0.01" aria-label="Increase weight">+</button>
       </div>
       <div class="stepper-caption">0.01 kg steps · today</div>
       ${weightSpark}
@@ -536,9 +536,9 @@ function renderLog() {
     <div class="card log-card">
       <div class="log-card-head"><span class="lc-title">Calories Eaten</span></div>
       <div class="stepper-row">
-        <button class="step-btn-lg" onclick="Actions.adjustKcal(-50)" aria-label="Decrease calories">−</button>
+        <button class="step-btn-lg" data-adjust="kcal" data-delta="-50" aria-label="Decrease calories">−</button>
         <div class="stepper-center"><span class="val">${(latestKcal ? latestKcal.kcal : 0).toLocaleString()}</span><span class="unit">kcal</span></div>
-        <button class="step-btn-lg" onclick="Actions.adjustKcal(50)" aria-label="Increase calories">+</button>
+        <button class="step-btn-lg" data-adjust="kcal" data-delta="50" aria-label="Increase calories">+</button>
       </div>
       <div class="stepper-caption">50 kcal steps · today</div>
       ${kcalSpark}
@@ -840,10 +840,49 @@ function setupTabs() {
   $("#btn-profile").addEventListener("click", openProfile);
 }
 
+// Press-and-hold repeat for stepper buttons (+/-), delegated so it keeps
+// working across re-renders. Handling the action on pointerdown (instead of
+// click) also stops iOS from treating rapid taps as a double-tap-to-zoom
+// and stops a held press from triggering text selection.
+function stepperAction(el) {
+  const delta = parseFloat(el.dataset.delta);
+  if (el.dataset.step) stepValue(el.dataset.step, delta);
+  else if (el.dataset.adjust === "weight") adjustWeight(delta);
+  else if (el.dataset.adjust === "kcal") adjustKcal(delta);
+}
+
+function setupSteppers() {
+  const HOLD_DELAY = 450;
+  const REPEAT_INTERVAL = 110;
+  let holdTimer = null;
+  let repeatTimer = null;
+  let activeEl = null;
+
+  function stop() {
+    clearTimeout(holdTimer);
+    clearInterval(repeatTimer);
+    holdTimer = null;
+    repeatTimer = null;
+    activeEl = null;
+  }
+
+  document.addEventListener("pointerdown", (e) => {
+    const el = e.target.closest(".step-btn, .step-btn-lg");
+    if (!el) return;
+    e.preventDefault();
+    activeEl = el;
+    stepperAction(el);
+    holdTimer = setTimeout(() => {
+      repeatTimer = setInterval(() => { if (activeEl) stepperAction(activeEl); }, REPEAT_INTERVAL);
+    }, HOLD_DELAY);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((evt) => document.addEventListener(evt, stop));
+}
+
 window.Actions = {
-  startWorkout, step: stepValue, logCurrentSet, startRest, skipRest, cancelWorkout, goHome: () => showScreen("home"),
+  startWorkout, logCurrentSet, startRest, skipRest, cancelWorkout, goHome: () => showScreen("home"),
   changeMonth,
-  adjustWeight, adjustKcal,
+  adjustKcal,
   openBuild, closeBuild, openProfile, closeProfile,
   newExerciseForm, editExercise, cancelExerciseForm, saveExerciseForm, deleteExercise,
   addDay, toggleEditDay, deleteDay, renameDay, reorderDay, reorderDayItem, removeDayItem, addDayItem, onDayItemExerciseChange,
@@ -853,6 +892,7 @@ window.Actions = {
 
 Store.subscribe(renderAll);
 setupTabs();
+setupSteppers();
 renderAll();
 
 if ("serviceWorker" in navigator) {

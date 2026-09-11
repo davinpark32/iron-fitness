@@ -31,7 +31,13 @@ body{
 }
 h1,h2,h3{ margin:0; text-wrap:balance; }
 button, input, select, textarea{ font-family:inherit; color:inherit; }
-button{ cursor:pointer; }
+button{
+  cursor:pointer;
+  touch-action:manipulation;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+}
 ::selection{ background:var(--lime); color:var(--lime-ink); }
 a{ color:var(--lime); }
 
