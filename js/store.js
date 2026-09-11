@@ -96,6 +96,13 @@ export const Store = {
     day.items = day.items.filter((it) => it.id !== itemId);
     save();
   },
+  updateDayItem(dayId, itemId, patch) {
+    const day = state.days[dayId];
+    const item = day && day.items.find((it) => it.id === itemId);
+    if (!item) return;
+    Object.assign(item, patch);
+    save();
+  },
   reorderDayItem(dayId, itemId, delta) {
     const day = state.days[dayId];
     if (!day) return;

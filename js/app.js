@@ -689,7 +689,7 @@ function renderLog() {
 // =========================================================
 // BUILD (program days, exercises added inline via search)
 // =========================================================
-const buildUi = { editingDayId: null, exercisePicker: null };
+const buildUi = { editingDayId: null, exercisePicker: null, editingItemId: null };
 
 function addDay() {
   const input = $("#new-day-name");
@@ -699,17 +699,19 @@ function addDay() {
   input.value = "";
   buildUi.editingDayId = id;
   buildUi.exercisePicker = null;
+  buildUi.editingItemId = null;
   renderBuild();
 }
 function toggleEditDay(id) {
   buildUi.editingDayId = buildUi.editingDayId === id ? null : id;
   buildUi.exercisePicker = null;
+  buildUi.editingItemId = null;
   renderBuild();
 }
 function deleteDay(id) {
   if (!confirm("Delete this training day?")) return;
   Store.deleteDay(id);
-  if (buildUi.editingDayId === id) { buildUi.editingDayId = null; buildUi.exercisePicker = null; }
+  if (buildUi.editingDayId === id) { buildUi.editingDayId = null; buildUi.exercisePicker = null; buildUi.editingItemId = null; }
   renderBuild();
 }
 function renameDay(id) {
@@ -718,7 +720,37 @@ function renameDay(id) {
 }
 function reorderDay(id, delta) { Store.reorderDay(id, delta); renderBuild(); }
 function reorderDayItem(dayId, itemId, delta) { Store.reorderDayItem(dayId, itemId, delta); renderBuild(); }
-function removeDayItem(dayId, itemId) { Store.removeDayItem(dayId, itemId); renderBuild(); }
+function removeDayItem(dayId, itemId) {
+  if (!confirm("Remove this exercise from the day?")) return;
+  Store.removeDayItem(dayId, itemId);
+  renderBuild();
+}
+
+function editDayItem(dayId, itemId) {
+  buildUi.editingItemId = itemId;
+  buildUi.exercisePicker = null;
+  renderBuild();
+}
+function cancelEditDayItem() {
+  buildUi.editingItemId = null;
+  renderBuild();
+}
+function saveDayItem(dayId, itemId) {
+  const day = Store.state.days[dayId];
+  const item = day && day.items.find((it) => it.id === itemId);
+  if (!item) return;
+  const ex = Store.state.exercises[item.exerciseId];
+
+  const sets = parseInt($(`#edit-sets-${itemId}`).value, 10) || 3;
+  const repsTarget = parseInt($(`#edit-reps-${itemId}`).value, 10) || 10;
+  const weight = parseFloat($(`#edit-weight-${itemId}`).value) || 0;
+  const restSec = parseInt($(`#edit-rest-${itemId}`).value, 10) || 90;
+  const group = $(`#edit-group-${itemId}`).value;
+
+  Store.upsertExercise({ id: item.exerciseId, name: ex ? ex.name : "Exercise", defaultSets: sets, defaultReps: repsTarget, defaultWeight: weight, restSec });
+  buildUi.editingItemId = null;
+  Store.updateDayItem(dayId, itemId, { sets, repsTarget, restSec, group });
+}
 
 // ---- exercise search picker (nested inside an open training day) ----
 function onExerciseSearch(dayId, query) {
@@ -855,17 +887,41 @@ function renderBuild() {
     const open = buildUi.editingDayId === id;
     const itemRows = day.items.map((it) => {
       const ex = state.exercises[it.exerciseId];
+      const exName = ex ? ex.name : "Unknown";
       const groupBadge = it.group !== "None" ? `<span class="dir-group">${it.group}</span>` : "";
+
+      if (buildUi.editingItemId === it.id) {
+        const groupOptions = Store.GROUPS.map((g) => `<option value="${g}" ${g === it.group ? "selected" : ""}>${g === "None" ? "No Superset" : "Superset " + g}</option>`).join("");
+        return `
+          <div class="day-item-edit">
+            <div class="dir-name" style="margin-bottom:10px;">${esc(exName)}</div>
+            <div class="field-row">
+              <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="edit-sets-${it.id}" value="${it.sets}"></div>
+              <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="edit-reps-${it.id}" value="${it.repsTarget}"></div>
+            </div>
+            <div class="field-row" style="margin-top:10px;">
+              <div class="field" style="margin-top:0;"><label>Weight kg</label><input type="text" inputmode="decimal" id="edit-weight-${it.id}" value="${ex ? ex.defaultWeight : 20}"></div>
+              <div class="field" style="margin-top:0;"><label>Rest s</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="edit-rest-${it.id}" value="${it.restSec}"></div>
+            </div>
+            <div class="field"><label>Group</label><select id="edit-group-${it.id}">${groupOptions}</select></div>
+            <div class="field-row" style="margin-top:14px;">
+              <button class="btn-ghost" onclick="Actions.cancelEditDayItem()">Cancel</button>
+              <button class="btn-cta" style="font-size:15px; padding:13px 0;" onclick="Actions.saveDayItem('${id}','${it.id}')">SAVE</button>
+            </div>
+          </div>`;
+      }
+
       return `
         <div class="day-item-row">
           <div class="dir-main">
-            <div class="dir-name">${groupBadge}${esc(ex ? ex.name : "Unknown")}</div>
+            <div class="dir-name">${groupBadge}${esc(exName)}</div>
             <div class="dir-meta">${it.sets}×${it.repsTarget} · ${it.restSec}s rest</div>
           </div>
           <div class="dir-actions">
             <button onclick="Actions.reorderDayItem('${id}','${it.id}',-1)" aria-label="Move up">↑</button>
             <button onclick="Actions.reorderDayItem('${id}','${it.id}',1)" aria-label="Move down">↓</button>
-            <button onclick="Actions.removeDayItem('${id}','${it.id}')" aria-label="Remove">✕</button>
+            <button onclick="Actions.editDayItem('${id}','${it.id}')" aria-label="Edit ${esc(exName)}">✎</button>
+            <button onclick="Actions.removeDayItem('${id}','${it.id}')" aria-label="Remove ${esc(exName)}">✕</button>
           </div>
         </div>`;
     }).join("") || `<div class="empty-mini">No exercises in this day yet.</div>`;
@@ -1079,6 +1135,7 @@ window.Actions = {
   adjustKcal,
   openBuild, closeBuild, openProfile, closeProfile, openSessionDetail, closeSessionDetail,
   addDay, toggleEditDay, deleteDay, renameDay, reorderDay, reorderDayItem, removeDayItem, addDayItem,
+  editDayItem, cancelEditDayItem, saveDayItem,
   onExerciseSearch, pickExercise, clearExercisePick, deleteCustomExercise,
   exportData, importData, handleImportFile, resetAll,
   setProgramName, setUserName, setUserHeight,
