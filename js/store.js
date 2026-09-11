@@ -1,6 +1,6 @@
 const KEY = "iron:v1";
 
-const GROUPS = ["None", "A", "B", "C"];
+const GROUPS = ["None", "A", "B", "C", "D", "E", "F"];
 
 function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
