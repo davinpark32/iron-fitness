@@ -175,17 +175,26 @@ function startWorkout(dayId) {
   const day = Store.state.days[dayId];
   if (!day || !day.items.length) { toast("This day has no exercises yet."); return; }
   const queue = buildQueue(day);
-  runner = { dayId, day, queue, pointer: 0, startedAt: Date.now(), entries: {}, restActive: false, restRemaining: 0, restTotal: 0, restTimerId: null };
-  initCurrentValues();
+  runner = { dayId, day, queue, pointer: 0, startedAt: Date.now(), log: {}, restActive: false, restRemaining: 0, restTotal: 0, restTimerId: null };
+  loadStepValues();
   showScreen("train");
 }
 
 function currentStep() { return runner.queue[runner.pointer]; }
 function currentItem() { const step = currentStep(); return runner.day.items.find((i) => i.id === step.itemId); }
 
-function initCurrentValues() {
+// Loads the draft weight/reps shown for the current pointer: whatever was
+// already logged there (so navigating back shows what you actually did),
+// otherwise sensible defaults.
+function loadStepValues() {
   const step = currentStep();
   const item = currentItem();
+  const logged = runner.log[runner.pointer];
+  if (logged) {
+    runner.currentWeight = logged.weight;
+    runner.currentReps = logged.reps;
+    return;
+  }
   const last = Store.lastWeightFor(step.exerciseId);
   const ex = Store.state.exercises[step.exerciseId];
   runner.currentWeight = last != null ? last : (ex ? ex.defaultWeight : 20);
@@ -199,20 +208,27 @@ function stepValue(kind, delta) {
   renderTrain();
 }
 
+function goToStep(index) {
+  if (!runner || index < 0 || index >= runner.queue.length) return;
+  runner.pointer = index;
+  clearInterval(runner.restTimerId);
+  runner.restActive = false;
+  loadStepValues();
+  renderTrain();
+}
+function goPrev() { if (runner) goToStep(runner.pointer - 1); }
+function goNext() { if (runner) goToStep(runner.pointer + 1); }
+
 function logCurrentSet() {
   const step = currentStep();
   const item = currentItem();
-  const ex = Store.state.exercises[step.exerciseId];
-  if (!runner.entries[step.exerciseId]) runner.entries[step.exerciseId] = { exerciseId: step.exerciseId, exerciseName: ex ? ex.name : "Exercise", sets: [] };
-  runner.entries[step.exerciseId].sets.push({ weight: runner.currentWeight, reps: runner.currentReps, target: item.repsTarget, ts: Date.now() });
-  runner.pointer++;
+  runner.log[runner.pointer] = { exerciseId: step.exerciseId, weight: runner.currentWeight, reps: runner.currentReps, target: item.repsTarget, ts: Date.now() };
   clearInterval(runner.restTimerId);
   runner.restActive = false;
-  if (runner.pointer >= runner.queue.length) {
+  if (runner.pointer >= runner.queue.length - 1) {
     finishWorkout();
   } else {
-    initCurrentValues();
-    renderTrain();
+    goToStep(runner.pointer + 1);
   }
 }
 
@@ -236,6 +252,22 @@ function skipRest() {
 
 function finishWorkout() {
   const durationSec = Math.max(1, Math.round((Date.now() - runner.startedAt) / 1000));
+  const state = Store.state;
+
+  // Group logged sets by exercise, in the order each exercise first appears
+  // in the queue (not log-insertion order, since navigating back and forth
+  // can log them out of order).
+  const byExercise = new Map();
+  runner.queue.forEach((step, i) => {
+    const entry = runner.log[i];
+    if (!entry) return;
+    if (!byExercise.has(step.exerciseId)) {
+      const ex = state.exercises[step.exerciseId];
+      byExercise.set(step.exerciseId, { exerciseId: step.exerciseId, exerciseName: ex ? ex.name : "Exercise", sets: [] });
+    }
+    byExercise.get(step.exerciseId).sets.push({ weight: entry.weight, reps: entry.reps, target: entry.target, ts: entry.ts });
+  });
+
   const session = {
     id: Store.uid(),
     dayId: runner.dayId,
@@ -243,7 +275,7 @@ function finishWorkout() {
     date: todayISO(),
     startedAt: runner.startedAt,
     durationSec,
-    entries: Object.values(runner.entries),
+    entries: Array.from(byExercise.values()),
   };
   const totalSets = session.entries.reduce((a, e) => a + e.sets.length, 0);
   runner = null;
@@ -311,7 +343,10 @@ function renderTrain() {
   const item = currentItem();
   const ex = state.exercises[step.exerciseId];
   const uniqueExercises = new Set(runner.day.items.map((i) => i.exerciseId)).size;
-  const doneExercises = new Set(Object.keys(runner.entries)).size;
+  const seenExercises = new Set();
+  for (let i = 0; i <= runner.pointer; i++) seenExercises.add(runner.queue[i].exerciseId);
+  const exercisePosition = seenExercises.size;
+  const alreadyLogged = !!runner.log[runner.pointer];
 
   let supersetBadge = "";
   let withLine = `Set ${step.setIndex + 1} of ${item.sets} · Target ${item.repsTarget} reps`;
@@ -351,8 +386,12 @@ function renderTrain() {
   root.innerHTML = `
     <div class="train-head">
       <div>
-        <div class="eyebrow">${esc(runner.day.name)} · Exercise ${doneExercises + (runner.entries[step.exerciseId] ? 0 : 1)} of ${uniqueExercises}</div>
+        <div class="eyebrow">${esc(runner.day.name)} · Exercise ${exercisePosition} of ${uniqueExercises}</div>
         <div class="train-title">${esc(ex ? ex.name : "")}</div>
+      </div>
+      <div class="train-nav">
+        <button onclick="Actions.goPrev()" aria-label="Previous set" ${runner.pointer === 0 ? "disabled" : ""}>‹</button>
+        <button onclick="Actions.goNext()" aria-label="Next set" ${runner.pointer === runner.queue.length - 1 ? "disabled" : ""}>›</button>
       </div>
     </div>
     <div class="bar-track" style="margin-top:12px;"><div class="bar-fill" style="width:${Math.round((runner.pointer / runner.queue.length) * 100)}%"></div></div>
@@ -380,7 +419,7 @@ function renderTrain() {
           </div>
         </div>
       </div>
-      <button class="log-set-btn" onclick="Actions.logCurrentSet()">LOG SET</button>
+      <button class="log-set-btn" onclick="Actions.logCurrentSet()">${alreadyLogged ? "UPDATE SET" : "LOG SET"}</button>
       ${restHtml}
       ${nextHtml}
     </div>
@@ -910,7 +949,7 @@ function setupSteppers() {
 }
 
 window.Actions = {
-  startWorkout, logCurrentSet, startRest, skipRest, cancelWorkout, goHome: () => showScreen("home"),
+  startWorkout, logCurrentSet, startRest, skipRest, cancelWorkout, goPrev, goNext, goHome: () => showScreen("home"),
   changeMonth,
   adjustKcal,
   openBuild, closeBuild, openProfile, closeProfile,

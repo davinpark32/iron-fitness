@@ -142,7 +142,14 @@ main::-webkit-scrollbar{ width:0; }
 .empty-state p{ font-size:13px; color:var(--text-dim); margin:8px 0 18px; line-height:1.5; }
 
 /* ---- TRAIN ---- */
-.train-head{ display:flex; justify-content:space-between; align-items:flex-start; }
+.train-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.train-nav{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.train-nav button{
+  width:40px; height:40px; border-radius:12px; border:1px solid var(--line-strong); background:var(--surface-2);
+  color:var(--text); font-size:20px; display:flex; align-items:center; justify-content:center;
+}
+.train-nav button:active{ background:var(--shell); }
+.train-nav button:disabled{ opacity:.3; }
 .train-title{ font-family:"Bebas Neue"; font-size:28px; letter-spacing:0.5px; }
 .train-sub{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
 .dots{ display:flex; gap:5px; margin-top:10px; flex-wrap:wrap; }
