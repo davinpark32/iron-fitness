@@ -626,8 +626,8 @@ function sparklineHtml(points, getValue, unitLabel, ariaLabel) {
       <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="${ariaLabel}">
         <line x1="0" y1="${pad}" x2="${w}" y2="${pad}" stroke="var(--line)" stroke-width="1"/>
         <line x1="0" y1="${h - pad}" x2="${w}" y2="${h - pad}" stroke="var(--line)" stroke-width="1"/>
-        <polyline points="${poly}" fill="none" stroke="var(--lime)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--lime)"/>
+        <polyline points="${poly}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--accent)"/>
       </svg>
       <div class="spark-caption"><span>${fmtDate(pts[0].date)} · ${getValue(pts[0]).toLocaleString()}${unitLabel}</span><span>${fmtDate(pts[pts.length - 1].date)} · ${getValue(pts[pts.length - 1]).toLocaleString()}${unitLabel}</span></div>
     </div>`;
@@ -739,7 +739,7 @@ function renderExerciseResults(dayId) {
   const customMatches = Object.values(state.exercises)
     .filter((ex) => !query || ex.name.toLowerCase().includes(query))
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((ex) => ({ id: ex.id, name: ex.name, source: "custom", defaultSets: ex.defaultSets, defaultReps: ex.defaultReps, defaultRest: ex.restSec }));
+    .map((ex) => ({ id: ex.id, name: ex.name, source: "custom", defaultSets: ex.defaultSets, defaultReps: ex.defaultReps, defaultWeight: ex.defaultWeight, defaultRest: ex.restSec }));
 
   if (!query) {
     picker.results = [];
@@ -751,11 +751,11 @@ function renderExerciseResults(dayId) {
   const dbMatches = EXERCISE_DB
     .filter((ex) => ex.name.toLowerCase().includes(query) && !customNames.has(ex.name.toLowerCase()))
     .slice(0, 25)
-    .map((ex) => ({ id: null, name: ex.name, source: "db", defaultSets: 3, defaultReps: 10, defaultRest: 90 }));
+    .map((ex) => ({ id: null, name: ex.name, source: "db", defaultSets: 3, defaultReps: 10, defaultWeight: 20, defaultRest: 90 }));
 
   const results = [...customMatches, ...dbMatches];
   if (!results.some((r) => r.name.toLowerCase() === query)) {
-    results.push({ id: null, name: picker.query.trim(), source: "new", defaultSets: 3, defaultReps: 10, defaultRest: 90 });
+    results.push({ id: null, name: picker.query.trim(), source: "new", defaultSets: 3, defaultReps: 10, defaultWeight: 20, defaultRest: 90 });
   }
   picker.results = results;
 
@@ -776,7 +776,13 @@ function renderExerciseResults(dayId) {
 function pickExercise(dayId, index) {
   const picker = buildUi.exercisePicker;
   if (!picker || !picker.results[index]) return;
-  picker.selected = picker.results[index];
+  picker.selected = { ...picker.results[index] };
+  // Default rest to whatever the previous exercise in this day used — one
+  // less field to fill in when supersetting or building a day in one go.
+  const day = Store.state.days[dayId];
+  if (day && day.items.length) {
+    picker.selected.defaultRest = day.items[day.items.length - 1].restSec;
+  }
   renderBuild();
 }
 function clearExercisePick(dayId) {
@@ -794,13 +800,13 @@ function addDayItem(dayId) {
 
   const sets = parseInt($(`#di-sets-${dayId}`).value, 10) || 3;
   const repsTarget = parseInt($(`#di-reps-${dayId}`).value, 10) || 10;
+  const weight = parseFloat($(`#di-weight-${dayId}`).value) || 0;
   const restSec = parseInt($(`#di-rest-${dayId}`).value, 10) || 90;
   const group = $(`#di-group-${dayId}`).value;
 
-  let exerciseId = picker.selected.id;
-  if (!exerciseId) {
-    exerciseId = Store.upsertExercise({ name: picker.selected.name, defaultSets: sets, defaultReps: repsTarget, defaultWeight: 20, restSec });
-  }
+  // Upsert either way: for a new exercise this creates it, for an existing
+  // one it refreshes its defaults to whatever was just set here.
+  const exerciseId = Store.upsertExercise({ id: picker.selected.id || undefined, name: picker.selected.name, defaultSets: sets, defaultReps: repsTarget, defaultWeight: weight, restSec });
 
   buildUi.exercisePicker = { dayId, query: "", selected: null, results: [] };
   Store.addDayItem(dayId, { exerciseId, sets, repsTarget, restSec, group });
@@ -817,9 +823,12 @@ function renderAddExerciseBlock(dayId) {
           <span>${esc(picker.selected.name)}</span>
           <button onclick="Actions.clearExercisePick('${dayId}')" aria-label="Change exercise">✕ Change</button>
         </div>
-        <div class="field-row3" style="margin-top:12px;">
+        <div class="field-row" style="margin-top:12px;">
           <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-sets-${dayId}" value="${picker.selected.defaultSets}"></div>
           <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-reps-${dayId}" value="${picker.selected.defaultReps}"></div>
+        </div>
+        <div class="field-row" style="margin-top:10px;">
+          <div class="field" style="margin-top:0;"><label>Weight kg</label><input type="text" inputmode="decimal" id="di-weight-${dayId}" value="${picker.selected.defaultWeight}"></div>
           <div class="field" style="margin-top:0;"><label>Rest s</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-rest-${dayId}" value="${picker.selected.defaultRest}"></div>
         </div>
         <div class="field"><label>Group</label><select id="di-group-${dayId}">${groupOptions}</select></div>
