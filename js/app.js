@@ -637,11 +637,11 @@ function renderBuild() {
     <div class="list-item">
       <div class="field"><label>Name</label><input type="text" id="ef-name" value="${esc(editingEx.name || "")}" placeholder="e.g. Barbell Bench Press"></div>
       <div class="field-row3" style="margin-top:14px;">
-        <div class="field" style="margin-top:0;"><label>Sets</label><input type="number" id="ef-sets" value="${editingEx.defaultSets ?? 3}" min="1" max="10"></div>
-        <div class="field" style="margin-top:0;"><label>Reps</label><input type="number" id="ef-reps" value="${editingEx.defaultReps ?? 10}" min="1" max="50"></div>
-        <div class="field" style="margin-top:0;"><label>Weight kg</label><input type="number" id="ef-weight" value="${editingEx.defaultWeight ?? 20}" step="0.5" min="0"></div>
+        <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-sets" value="${editingEx.defaultSets ?? 3}"></div>
+        <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-reps" value="${editingEx.defaultReps ?? 10}"></div>
+        <div class="field" style="margin-top:0;"><label>Weight kg</label><input type="text" inputmode="decimal" id="ef-weight" value="${editingEx.defaultWeight ?? 20}"></div>
       </div>
-      <div class="field"><label>Rest (seconds)</label><input type="number" id="ef-rest" value="${editingEx.restSec ?? 90}" step="15" min="0"></div>
+      <div class="field"><label>Rest (seconds)</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="ef-rest" value="${editingEx.restSec ?? 90}"></div>
       <div class="field-row" style="margin-top:16px;">
         <button class="btn-ghost" onclick="Actions.cancelExerciseForm()">Cancel</button>
         <button class="btn-cta" style="font-size:15px; padding:13px 0;" onclick="Actions.saveExerciseForm()">SAVE</button>
@@ -694,9 +694,9 @@ function renderBuild() {
         <div class="add-row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px;">
           <div class="field" style="margin-top:0;"><label>Add Exercise</label><select id="di-exercise-${id}" onchange="Actions.onDayItemExerciseChange('${id}')">${exerciseOptions}</select></div>
           <div class="field-row3" style="margin-top:10px;">
-            <div class="field" style="margin-top:0;"><label>Sets</label><input type="number" id="di-sets-${id}" value="3" min="1" max="10"></div>
-            <div class="field" style="margin-top:0;"><label>Reps</label><input type="number" id="di-reps-${id}" value="10" min="1" max="50"></div>
-            <div class="field" style="margin-top:0;"><label>Rest s</label><input type="number" id="di-rest-${id}" value="90" step="15" min="0"></div>
+            <div class="field" style="margin-top:0;"><label>Sets</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-sets-${id}" value="3"></div>
+            <div class="field" style="margin-top:0;"><label>Reps</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-reps-${id}" value="10"></div>
+            <div class="field" style="margin-top:0;"><label>Rest s</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="di-rest-${id}" value="90"></div>
           </div>
           <div class="field"><label>Group</label><select id="di-group-${id}">${groupOptions}</select></div>
           <button class="btn-cta" style="margin-top:14px; font-size:16px; padding:15px 0;" onclick="Actions.addDayItem('${id}')">+ ADD TO DAY</button>
@@ -805,7 +805,7 @@ function renderProfile() {
       <div class="build-section">
         <h3>About You</h3>
         <div class="field"><label>Name</label><input type="text" value="${esc(state.userName)}" placeholder="e.g. Alex" onchange="Actions.setUserName(this.value)"></div>
-        <div class="field"><label>Height (cm)</label><input type="number" value="${state.userHeightCm ?? ""}" placeholder="e.g. 178" step="0.5" min="0" onchange="Actions.setUserHeight(this.value)"></div>
+        <div class="field"><label>Height (cm)</label><input type="text" inputmode="decimal" value="${state.userHeightCm ?? ""}" placeholder="e.g. 178" onchange="Actions.setUserHeight(this.value)"></div>
       </div>
 
       <div class="build-section">
