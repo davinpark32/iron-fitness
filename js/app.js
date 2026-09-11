@@ -22,6 +22,30 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
 }
 
+// In-app confirmation modal — native window.confirm() is unreliable in
+// standalone/home-screen PWA mode on iOS (it can silently no-op instead of
+// blocking), so destructive actions go through this instead.
+let confirmCallback = null;
+function showConfirm(message, onConfirm, confirmLabel) {
+  confirmCallback = onConfirm;
+  $("#confirm-message").textContent = message;
+  $("#confirm-ok").textContent = confirmLabel || "Delete";
+  $("#confirm-backdrop").classList.add("show");
+}
+function hideConfirm() {
+  $("#confirm-backdrop").classList.remove("show");
+  confirmCallback = null;
+}
+function setupConfirmModal() {
+  $("#confirm-cancel").addEventListener("click", hideConfirm);
+  $("#confirm-backdrop").addEventListener("click", (e) => { if (e.target.id === "confirm-backdrop") hideConfirm(); });
+  $("#confirm-ok").addEventListener("click", () => {
+    const cb = confirmCallback;
+    hideConfirm();
+    if (cb) cb();
+  });
+}
+
 // =========================================================
 // derived stats
 // =========================================================
@@ -333,10 +357,11 @@ function renderTrainDone(session, totalSets) {
 }
 
 function cancelWorkout() {
-  if (!confirm("Cancel this workout? Nothing logged so far will be saved.")) return;
-  clearInterval(runner && runner.restTimerId);
-  runner = null;
-  showScreen("home");
+  showConfirm("Cancel this workout? Nothing logged so far will be saved.", () => {
+    clearInterval(runner && runner.restTimerId);
+    runner = null;
+    showScreen("home");
+  }, "Cancel Workout");
 }
 
 function renderTrainPicker() {
@@ -709,10 +734,11 @@ function toggleEditDay(id) {
   renderBuild();
 }
 function deleteDay(id) {
-  if (!confirm("Delete this training day?")) return;
-  Store.deleteDay(id);
-  if (buildUi.editingDayId === id) { buildUi.editingDayId = null; buildUi.exercisePicker = null; buildUi.editingItemId = null; }
-  renderBuild();
+  showConfirm("Delete this training day?", () => {
+    Store.deleteDay(id);
+    if (buildUi.editingDayId === id) { buildUi.editingDayId = null; buildUi.exercisePicker = null; buildUi.editingItemId = null; }
+    renderBuild();
+  }, "Delete Day");
 }
 function renameDay(id) {
   const name = $(`#day-name-${id}`).value.trim();
@@ -721,9 +747,10 @@ function renameDay(id) {
 function reorderDay(id, delta) { Store.reorderDay(id, delta); renderBuild(); }
 function reorderDayItem(dayId, itemId, delta) { Store.reorderDayItem(dayId, itemId, delta); renderBuild(); }
 function removeDayItem(dayId, itemId) {
-  if (!confirm("Remove this exercise from the day?")) return;
-  Store.removeDayItem(dayId, itemId);
-  renderBuild();
+  showConfirm("Remove this exercise from the day?", () => {
+    Store.removeDayItem(dayId, itemId);
+    renderBuild();
+  }, "Remove");
 }
 
 function editDayItem(dayId, itemId) {
@@ -822,8 +849,9 @@ function clearExercisePick(dayId) {
   renderBuild();
 }
 function deleteCustomExercise(dayId, exerciseId) {
-  if (!confirm("Delete this custom exercise? It will be removed from any training days using it.")) return;
-  Store.deleteExercise(exerciseId);
+  showConfirm("Delete this custom exercise? It will be removed from any training days using it.", () => {
+    Store.deleteExercise(exerciseId);
+  }, "Delete");
 }
 
 function addDayItem(dayId) {
@@ -1015,9 +1043,10 @@ function handleImportFile(e) {
   reader.readAsText(file);
 }
 function resetAll() {
-  if (!confirm("Erase all workouts, exercises, and logs on this device? This cannot be undone.")) return;
-  Store.resetAll();
-  renderProfile();
+  showConfirm("Erase all workouts, exercises, and logs on this device? This cannot be undone.", () => {
+    Store.resetAll();
+    renderProfile();
+  }, "Erase Everything");
 }
 
 function renderProfile() {
@@ -1153,6 +1182,7 @@ function disablePinchZoom() {
 Store.subscribe(renderAll);
 setupTabs();
 setupSteppers();
+setupConfirmModal();
 disablePinchZoom();
 renderAll();
 

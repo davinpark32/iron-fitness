@@ -375,6 +375,24 @@ nav.tabbar{ display:flex; border-top:1px solid var(--line); background:var(--she
 }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
 
+/* ---- confirm modal ---- */
+.modal-backdrop{
+  position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center; padding:24px;
+  opacity:0; pointer-events:none; transition:opacity .15s ease;
+}
+.modal-backdrop.show{ opacity:1; pointer-events:auto; }
+.modal-card{
+  width:100%; max-width:340px; background:var(--surface); border-radius:var(--radius-lg);
+  padding:22px; box-shadow:0 20px 60px -20px rgba(0,0,0,.4);
+  transform:scale(.96); transition:transform .15s ease;
+}
+.modal-backdrop.show .modal-card{ transform:scale(1); }
+.modal-message{ font-size:15px; font-weight:600; line-height:1.5; color:var(--text); }
+.modal-actions{ display:flex; gap:10px; margin-top:20px; }
+.modal-actions button{ flex:1; }
+.btn-cta.danger{ background:var(--danger); }
+
 @media (max-width:400px){
   .rest-clock{ font-size:40px; }
   .readout .rval{ font-size:28px; }
