@@ -1027,17 +1027,36 @@ function stepperAction(el) {
 
 function setupSteppers() {
   const HOLD_DELAY = 450;
-  const REPEAT_INTERVAL = 110;
   let holdTimer = null;
   let repeatTimer = null;
   let activeEl = null;
+  let repeatCount = 0;
+
+  // The longer a stepper is held, the faster it fires — starts at a
+  // controlled pace and ramps up to a fast scroll so big adjustments
+  // don't take forever to hold through.
+  function intervalForCount(n) {
+    if (n < 8) return 110;
+    if (n < 20) return 55;
+    return 25;
+  }
+
+  function scheduleNext() {
+    repeatTimer = setTimeout(() => {
+      if (!activeEl) return;
+      stepperAction(activeEl);
+      repeatCount++;
+      scheduleNext();
+    }, intervalForCount(repeatCount));
+  }
 
   function stop() {
     clearTimeout(holdTimer);
-    clearInterval(repeatTimer);
+    clearTimeout(repeatTimer);
     holdTimer = null;
     repeatTimer = null;
     activeEl = null;
+    repeatCount = 0;
   }
 
   document.addEventListener("pointerdown", (e) => {
@@ -1047,7 +1066,8 @@ function setupSteppers() {
     activeEl = el;
     stepperAction(el);
     holdTimer = setTimeout(() => {
-      repeatTimer = setInterval(() => { if (activeEl) stepperAction(activeEl); }, REPEAT_INTERVAL);
+      repeatCount = 0;
+      scheduleNext();
     }, HOLD_DELAY);
   });
   ["pointerup", "pointerleave", "pointercancel"].forEach((evt) => document.addEventListener(evt, stop));
