@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Iron — Workout Tracker</title>
+<meta name="description" content="A simple workout tracker with oversized controls built for mid-set use.">
+<meta name="theme-color" content="#15170f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Iron">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <header class="topbar">
+    <div class="wordmark">IRON<span class="dot">.</span></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="btn-profile" title="Profile" aria-label="Profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.6-3.6 5-5.5 7.5-5.5s5.9 1.9 7.5 5.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ============ HOME ============ -->
+    <section class="screen active" id="screen-home"></section>
+
+    <!-- ============ TRAIN ============ -->
+    <section class="screen" id="screen-train"></section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="screen" id="screen-history"></section>
+
+    <!-- ============ LOG ============ -->
+    <section class="screen" id="screen-log"></section>
+
+    <!-- ============ BUILD (full-screen overlay) ============ -->
+    <section class="screen overlay" id="screen-build"></section>
+
+    <!-- ============ PROFILE (full-screen overlay) ============ -->
+    <section class="screen overlay" id="screen-profile"></section>
+
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-target="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="tab" data-target="train">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8v8M8 5v14M12 9v6M16 5v14M20 8v8"/></svg>
+      <span>Train</span>
+    </button>
+    <button class="tab" data-target="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v3M16 3v3M8 14l2.2 2.2L15 12"/></svg>
+      <span>History</span>
+    </button>
+    <button class="tab" data-target="log">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19l5-6 4 3 7-9"/><path d="M4 19h16"/></svg>
+      <span>Log</span>
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
