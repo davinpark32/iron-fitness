@@ -14,6 +14,13 @@ function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function todayISO() { return isoDate(new Date()); }
+
+// parseInt(...) || fallback breaks for a legitimately-entered 0 (0 is
+// falsy), which is exactly what happened with a 0-second rest time.
+function parseIntOr(value, fallback) {
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
 function fmtMinSec(sec) { const m = Math.floor(sec / 60), s = sec % 60; return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
 function fmtHM(sec) { const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
 function fmtDate(iso) { const d = new Date(iso + "T00:00:00"); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
@@ -80,7 +87,7 @@ function sessionsThisWeek(sessions) {
 }
 function estimateMinutes(day) {
   let total = 0;
-  day.items.forEach((it) => { total += it.sets * (1 + (it.restSec || 60) / 60); });
+  day.items.forEach((it) => { total += it.sets * (1 + (it.restSec ?? 60) / 60); });
   return Math.round(total);
 }
 function nextDay(state) {
@@ -278,8 +285,8 @@ function primaryTrainAction() {
     const item = currentItem();
     const ex = Store.state.exercises[step.exerciseId];
     runner.log[runner.pointer] = { exerciseId: step.exerciseId, weight: runner.currentWeight, reps: runner.currentReps, rir: runner.currentRir, target: item.repsTarget, ts: Date.now() };
-    const restSec = item.restSec || (ex ? ex.restSec : 90) || 90;
-    startRest(restSec);
+    const restSec = item.restSec ?? ex?.restSec ?? 90;
+    if (restSec > 0) startRest(restSec);
     renderTrain();
     return;
   }
@@ -300,16 +307,25 @@ function primaryTrainLabel() {
   return next.exerciseId === cur.exerciseId ? "NEXT SET →" : "NEXT EXERCISE →";
 }
 
+// Counts down from a wall-clock end time rather than just decrementing
+// once per tick. Mobile browsers throttle or fully suspend setInterval in
+// a backgrounded tab, so a tick-counting timer falls behind (or stops
+// entirely) while you're in another app. Recomputing from Date.now() means
+// the instant you come back, the clock is already showing the correct
+// remaining time instead of wherever it happened to stall.
 function startRest(seconds) {
   clearInterval(runner.restTimerId);
   runner.restActive = true;
-  runner.restRemaining = seconds;
   runner.restTotal = seconds;
-  runner.restTimerId = setInterval(() => {
-    runner.restRemaining--;
-    if (runner.restRemaining <= 0) { clearInterval(runner.restTimerId); runner.restActive = false; }
-    renderTrain();
-  }, 1000);
+  runner.restEndAt = Date.now() + seconds * 1000;
+  runner.restRemaining = seconds;
+  runner.restTimerId = setInterval(tickRest, 1000);
+}
+function tickRest() {
+  if (!runner || !runner.restActive) return;
+  runner.restRemaining = Math.max(0, Math.round((runner.restEndAt - Date.now()) / 1000));
+  if (runner.restRemaining <= 0) { clearInterval(runner.restTimerId); runner.restActive = false; }
+  renderTrain();
 }
 function skipRest() {
   clearInterval(runner.restTimerId);
@@ -427,7 +443,7 @@ function renderTrain() {
 
   let restHtml = "";
   if (runner.restActive) {
-    const pct = Math.max(0, (runner.restRemaining / runner.restTotal) * 100);
+    const pct = runner.restTotal ? Math.max(0, (runner.restRemaining / runner.restTotal) * 100) : 0;
     restHtml = `
       <div class="rest-panel">
         <div class="rest-eyebrow">Resting</div>
@@ -807,7 +823,7 @@ function saveDayItem(dayId, itemId) {
   const sets = parseInt($(`#edit-sets-${itemId}`).value, 10) || 3;
   const repsTarget = parseInt($(`#edit-reps-${itemId}`).value, 10) || 10;
   const weight = parseFloat($(`#edit-weight-${itemId}`).value) || 0;
-  const restSec = parseInt($(`#edit-rest-${itemId}`).value, 10) || 90;
+  const restSec = Math.max(0, parseIntOr($(`#edit-rest-${itemId}`).value, 90));
   const group = $(`#edit-group-${itemId}`).value;
 
   Store.upsertExercise({ id: item.exerciseId, name: ex ? ex.name : "Exercise", defaultSets: sets, defaultReps: repsTarget, defaultWeight: weight, restSec });
@@ -897,7 +913,7 @@ function addDayItem(dayId) {
   const sets = parseInt($(`#di-sets-${dayId}`).value, 10) || 3;
   const repsTarget = parseInt($(`#di-reps-${dayId}`).value, 10) || 10;
   const weight = parseFloat($(`#di-weight-${dayId}`).value) || 0;
-  const restSec = parseInt($(`#di-rest-${dayId}`).value, 10) || 90;
+  const restSec = Math.max(0, parseIntOr($(`#di-rest-${dayId}`).value, 90));
   const group = $(`#di-group-${dayId}`).value;
 
   // Upsert either way: for a new exercise this creates it, for an existing
@@ -1215,10 +1231,20 @@ function disablePinchZoom() {
   document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
 
+// The rest-timer interval can't be relied on to keep firing on schedule
+// while the tab is backgrounded — catch up the instant it's visible again
+// rather than waiting for the next (possibly very late) tick.
+function setupVisibilityCatchup() {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && runner && runner.restActive) tickRest();
+  });
+}
+
 Store.subscribe(renderAll);
 setupTabs();
 setupSteppers();
 setupConfirmModal();
+setupVisibilityCatchup();
 disablePinchZoom();
 renderAll();
 
